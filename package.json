@@ -2,28 +2,51 @@
   "name": "webrtc",
   "version": "1.0.0",
   "description": "",
-  "main": "dist/webrtc.cjs.js",
-  "module": "dist/webrtc.esm.js",
-  "browser": "dist/webrtc.umd.js",
-  "files": [
-    "src",
-    "dist/*.js",
-    "types/*.d.ts"
+  "main": "build/main/index.js",
+  "typings": "build/main/index.d.ts",
+  "module": "build/module/index.js",
+  "browser": "build/browser/webrtc.umd.js",
+  "license": "MIT",
+  "keywords": [
+    "typescript",
+    "library",
+    "node",
+    "eslint",
+    "prettier"
   ],
   "scripts": {
-    "build": "rimraf dist && rimraf lib && tsc && rollup -c"
+    "build": "run-s build:*",
+    "build:main": "tsc -p tsconfig.json",
+    "build:module": "tsc -p tsconfig.module.json",
+    "build:browser": "webpack",
+    "fix": "run-s fix:*",
+    "fix:prettier": "prettier \"src/**/*.ts\" --write",
+    "fix:lint": "eslint src --ext .ts --fix",
+    "watch:build": "tsc -p tsconfig.json -w"
   },
-  "author": "Rotachev Gleb (gudlayv)",
-  "license": "ISC",
   "devDependencies": {
-    "@babel/core": "^7.16.0",
-    "@babel/preset-env": "^7.16.4",
-    "@open-wc/building-rollup": "^2.0.1",
-    "@rollup/plugin-babel": "^5.3.0",
-    "@rollup/plugin-commonjs": "^21.0.1",
-    "@rollup/plugin-node-resolve": "^13.0.6",
-    "rimraf": "^3.0.2",
-    "rollup": "^2.60.2",
-    "typescript": "^4.5.2"
+    "@types/node": "^14.6.2",
+    "@typescript-eslint/eslint-plugin": "^4.0.1",
+    "@typescript-eslint/parser": "^4.0.1",
+    "eslint": "^7.8.0",
+    "eslint-config-prettier": "^6.11.0",
+    "eslint-plugin-eslint-comments": "^3.2.0",
+    "eslint-plugin-import": "^2.22.0",
+    "npm-run-all": "^4.1.5",
+    "prettier": "^2.1.1",
+    "ts-node": "^9.0.0",
+    "typescript": "^4.0.2",
+    "webpack": "^5.67.0",
+    "webpack-cli": "^4.9.2"
+  },
+  "files": [
+    "build/main",
+    "build/module",
+    "!**/*.spec.*",
+    "!**/*.json",
+    "README.md"
+  ],
+  "prettier": {
+    "singleQuote": true
   }
 }

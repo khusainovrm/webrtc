@@ -1,0 +1,4 @@
+include:
+  - project: 'renhealth/ci-fe'
+    ref: 'master'
+    file: '/.publish.gitlab-ci.yml'
