@@ -117,10 +117,10 @@ export class RTCDoctor implements IRTCDoctor {
     if (mediaStream) {
       mediaStream
         .getAudioTracks()
-        .forEach((audioTrack) => (audioTrack.enabled = deviceState.isMute));
+        .forEach((audioTrack) => (audioTrack.enabled = !deviceState.isMute));
       mediaStream
         .getVideoTracks()
-        .forEach((videoTrack) => (videoTrack.enabled = deviceState.isHidden));
+        .forEach((videoTrack) => (videoTrack.enabled = !deviceState.isHidden));
     }
 
     this._sendMyProps();
