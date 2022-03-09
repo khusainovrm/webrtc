@@ -4,7 +4,6 @@ import { IEventsEmitter } from '../emitter.types';
 import { ISocketMessenger, SocketMessage } from '../socketManager.types';
 
 export type uuid = string;
-export type CallCallback = (hasEntered: boolean) => void;
 
 export type HasDevice = {
   hasCamera: boolean;

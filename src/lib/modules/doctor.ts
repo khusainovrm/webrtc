@@ -4,7 +4,7 @@ import { EventsEmitter } from '../emitter';
 import {
   CONNECTION_EVENT_LIST,
   EVENT_LIST,
-  SOCKET_MESSAGES_EVENT_LIST,
+  SOCKET_MESSAGES_EVENT_LIST
 } from '../events';
 import { SocketMessenger } from '../socketManager';
 import {
@@ -15,7 +15,7 @@ import {
   IReceiveMessageRtcSendProps,
   IReceiveMessageVideoOffer,
   IRtcSendPropsData,
-  IVideoOfferData,
+  IVideoOfferData
 } from '../socketManager.types';
 import { logger } from '../utils/logging';
 
@@ -30,7 +30,7 @@ import {
   Member,
   NewConnection,
   RTCConnection,
-  UnknownResolve,
+  UnknownResolve
 } from './doctor.types';
 
 const ENTER_TIMEOUT_DEFAULT = 10;
@@ -63,16 +63,17 @@ export class RTCDoctor implements IRTCDoctor {
   hasAnswered: boolean;
   deviceInfo: DeviceInfo;
 
-  private _enterTimeoutSecond: number;
+  private readonly _enterTimeoutSecond: number;
   private _enteringTimeout: NodeJS.Timeout | null;
   private _enterResolve: UnknownResolve;
-  private _answerTimeoutSecond: number;
+  private readonly _answerTimeoutSecond: number;
   private _answerTimeout: NodeJS.Timeout | null;
   private _answerResolve: UnknownResolve;
 
   /**
    * @constructor
    * @param params {Object}
+   * @param connectionConfig
    */
   constructor(params: IRTCDoctorParams, connectionConfig?: RTCConfiguration) {
     this.connectionConfig = connectionConfig || {};
@@ -93,9 +94,7 @@ export class RTCDoctor implements IRTCDoctor {
     this._answerTimeoutSecond =
       params.answerTimeoutSecond || ANSWER_TIMEOUT_DEFAULT;
     this.hasAnswered = false;
-    this._enterResolve = (value) => {
-      value;
-    };
+    this._enterResolve = () => undefined;
 
     // Socket
     this.socketMessenger = new SocketMessenger(params);
@@ -105,9 +104,7 @@ export class RTCDoctor implements IRTCDoctor {
       params.enterTimeoutSecond || ENTER_TIMEOUT_DEFAULT;
     this._enteringTimeout = null;
     this.hasEntered = false;
-    this._answerResolve = (value) => {
-      value;
-    };
+    this._answerResolve = () => undefined;
   }
 
   changeDeviceState(deviceState: DeviceState): void {
@@ -128,7 +125,7 @@ export class RTCDoctor implements IRTCDoctor {
 
   async call(): Promise<MediaStream> {
     await this._initLocalMediaStream();
-    this._sendAvailableEvent(true);
+    await this._sendAvailableEvent(true);
 
     const enterMessage = this.socketMessenger.createPublishMessage(
       SOCKET_MESSAGES_EVENT_LIST.ENTER
@@ -190,7 +187,6 @@ export class RTCDoctor implements IRTCDoctor {
 
   /**
    * Закрытие соединения
-   * @param clientId {String} uuid клиента
    * @returns {Promise<void>}
    */
   private async _closeConnection() {
@@ -208,7 +204,6 @@ export class RTCDoctor implements IRTCDoctor {
    * Создание RTC соединения
    * @param clientId {String} uuid клиента
    * @param connectionId {String} uuid соединения
-   * @param name {String} uuid клиента
    * @param isInviter {Boolean} Флаг приглашающий
    * @returns {Promise<RTCPeerConnection>}
    */
@@ -244,7 +239,7 @@ export class RTCDoctor implements IRTCDoctor {
   }
 
   /**
-   * Создание соединения для кондидата
+   * Создание соединения для кандидата
    * @param clientId {String} uuid клиента
    * @param connectionId {String} uuid соединения
    * @param name {String} uuid клиента
@@ -495,7 +490,7 @@ export class RTCDoctor implements IRTCDoctor {
   }
 
   /**
-   * Обработчии события icecandidate
+   * Обработчики события icecandidate
    * @see https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/onicecandidate
    * @param event {RTCPeerConnectionIceEvent}
    * @param connection {RTCPeerConnection}
@@ -521,9 +516,9 @@ export class RTCDoctor implements IRTCDoctor {
   }
 
   /**
-   * Обработчии события изменения статуса ice агента
+   * Обработчики события изменения статуса ice агента
    * @see https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/oniceconnectionstatechange
-   * @param event {Event}
+   * @param _
    * @param connection {RTCPeerConnection}
    * @returns {void}
    * @private
@@ -541,6 +536,9 @@ export class RTCDoctor implements IRTCDoctor {
     switch (connection.iceConnectionState) {
       case 'closed':
       case 'disconnected':
+        this.emitter
+          .emit(EVENT_LIST.HANG_UP)
+          .then();
         this._closeConnection().then();
         break;
       case 'failed':
@@ -561,7 +559,7 @@ export class RTCDoctor implements IRTCDoctor {
    * Обработчик события signalingState
    * @desc события при изменении signalingState однорангового соединения, что может произойти либо из-за вызова setLocalDescription (), либо из-за setRemoteDescription ().
    * @see https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/onsignalingstatechange
-   * @param event {Event}
+   * @param _
    * @param connection {RTCPeerConnection}
    * @returns {void}
    * @private
@@ -622,7 +620,7 @@ export class RTCDoctor implements IRTCDoctor {
    * @private
    */
   private async _videoOfferMessageHandler(data: IVideoOfferData) {
-    if (this.connection) this._closeConnection();
+    if (this.connection) await this._closeConnection();
 
     const connection = await this._createPeerConnection({
       connectionId: data.sender.connectionId,

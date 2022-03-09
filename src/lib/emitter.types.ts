@@ -24,8 +24,6 @@ export enum EMIT_TYPE_LIST {
 
 // DataEvents
 export type AllEventData = any;
-export type MediaStreamUpdateEventData = MediaStream;
-export type BaseMediaStreamUpdateEventData = MediaStream;
 export type ConnectionCloseEventData = RTCConnection;
 export type ConnectionNewEventData = RTCConnection;
 export type ConnectionIceStateEventData = RTCConnection;

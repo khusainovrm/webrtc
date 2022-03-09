@@ -56,7 +56,8 @@ export class EventsEmitter implements IEventsEmitter {
   /**
    * Отправка события всем подписчикам
    * @param eventType {String}
-   * @param event {EventEmitter}
+   * @param payload
+   * @param emitType
    */
   async emit<K extends keyof EventDataMap>(
     eventType: K,
