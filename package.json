@@ -1,5 +1,5 @@
 {
-  "name": "budu-webrtc",
+  "name": "@frontend/budu-webrtc",
   "version": "1.0.1",
   "author": "Rotachev Gleb",
   "description": "Library for implementing consultations based on WebRTC",
