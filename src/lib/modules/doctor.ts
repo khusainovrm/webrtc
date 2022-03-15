@@ -4,7 +4,7 @@ import { EventsEmitter } from '../emitter';
 import {
   CONNECTION_EVENT_LIST,
   EVENT_LIST,
-  SOCKET_MESSAGES_EVENT_LIST
+  SOCKET_MESSAGES_EVENT_LIST,
 } from '../events';
 import { SocketMessenger } from '../socketManager';
 import {
@@ -15,7 +15,7 @@ import {
   IReceiveMessageRtcSendProps,
   IReceiveMessageVideoOffer,
   IRtcSendPropsData,
-  IVideoOfferData
+  IVideoOfferData,
 } from '../socketManager.types';
 import { logger } from '../utils/logging';
 
@@ -30,7 +30,7 @@ import {
   Member,
   NewConnection,
   RTCConnection,
-  UnknownResolve
+  UnknownResolve,
 } from './doctor.types';
 
 const ENTER_TIMEOUT_DEFAULT = 10;
@@ -485,6 +485,7 @@ export class RTCDoctor implements IRTCDoctor {
    * @private
    */
   private async _enterRoomHandler(data: EnterData) {
+    this.connectionConfig.iceServers = data.iceservers;
     this.params.connectionId = data.sender.connectionId;
     this.params.name = this.params.clientId;
   }
@@ -536,9 +537,7 @@ export class RTCDoctor implements IRTCDoctor {
     switch (connection.iceConnectionState) {
       case 'closed':
       case 'disconnected':
-        this.emitter
-          .emit(EVENT_LIST.HANG_UP)
-          .then();
+        this.emitter.emit(EVENT_LIST.HANG_UP).then();
         this._closeConnection().then();
         break;
       case 'failed':
