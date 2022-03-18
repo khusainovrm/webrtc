@@ -75,10 +75,10 @@ console.log(logger.filter( l => l.event === 'enter'))
 Обеспечивает пул соединений на стороне врача.
 
 ```typescript
-export interface IRTCDoctor {
+export interface RTCCoreInterface {
   connectionConfig: RTCConfiguration;
   emitter: IEventsEmitter;
-  params: IRTCDoctorParams;
+  params: RTCParams;
   mediaStream: MediaStream | null;
   allMediaStreams: MediaStream[];
   connection: RTCConnection | null;
@@ -103,10 +103,10 @@ new RTCPeerConnection(this.connectionConfig);
 
 **_param `RTCDoc.emitter` - [`EventsEmitter`](#class-events-emitter)_**
 Инстанс класса [`EventsEmitter`](#class-events-emitter) для работы с событиями
-**_param `RTCDoc.params` - [`IRTCDoctorParams`](#type-rtc-doc-params)_**
+**_param `RTCDoc.params` - [`RTCParams`](#type-rtc-doc-params)_**
 Вспомогательная информация
 
-> смотреть описания типа [`IRTCDoctorParams`](#type-rtc-doc-params)
+> смотреть описания типа [`RTCParams`](#type-rtc-doc-params)
 
 **_param `RTCDoc.mediaStream` - [`MediaStream`](https://developer.mozilla.org/en-US/docs/Web/API/MediaStream) | null_**
 **_param `RTCDoc.allMediaStreams` - [`MediaStream`](https://developer.mozilla.org/en-US/docs/Web/API/MediaStream)[]_**
@@ -248,10 +248,10 @@ export type TransientMessage = {
 };
 ```
 
-#### type [`IRTCDoctorParams`](#type-rtc-doc-params) <a name="type-rtc-doc-params"></a>
+#### type [`RTCParams`](#type-rtc-doc-params) <a name="type-rtc-doc-params"></a>
 
 ```typescript
-export type IRTCDoctorParams = {
+export type RTCParams = {
   name: string;
   clientId: string;
   connectionId: string | null;
