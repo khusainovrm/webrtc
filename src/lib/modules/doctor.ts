@@ -1,7 +1,7 @@
 'use strict';
 
 import { RTCCore } from './core';
-import { RTCParams } from './core.types';
+import { RTCConnection, RTCParams } from './core.types';
 
 export class RTCDoctor extends RTCCore {
   constructor(
@@ -10,6 +10,16 @@ export class RTCDoctor extends RTCCore {
   ) {
     super(params, connectionConfig);
     this.isDoctor = true;
+  }
+
+  protected _iceConnectionStateChangeEventHandler(
+    event: Event,
+    connection: RTCConnection
+  ): void {
+    super._iceConnectionStateChangeEventHandler(event, connection);
+    if (connection.iceConnectionState === 'failed') {
+      this._connectMember(connection.connectionId);
+    }
   }
 }
 

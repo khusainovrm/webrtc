@@ -37,11 +37,8 @@ export type RTCParams = {
 };
 
 export type RTCConnection = RTCPeerConnection & {
-  clientId: string;
   connectionId: string;
-  name: string;
   iceCandidatesQueue: RTCIceCandidate[];
-  isInviter: boolean;
   isClosing: boolean;
 };
 
@@ -87,10 +84,11 @@ export type CallErrorType = Error & {
 };
 
 export interface StreamControllerInterface {
-  value: MediaStream | null;
   list: MediaStream[];
-  stopAllTracks(): void;
+
   initLocalMediaStream(): Promise<[MediaStream, HasDevice]>;
+  getStream(): Promise<MediaStream>;
+  stopAllTracks(): void;
 }
 
 export interface RTCInterface {

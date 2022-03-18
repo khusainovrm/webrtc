@@ -26,7 +26,6 @@ import {
   DeviceInfo,
   DeviceState,
   HasDevice,
-  Member,
   RTCConnection,
   RTCInterface,
   RTCParams,
@@ -55,19 +54,27 @@ const ENTER_TIMEOUT_DEFAULT = 10;
 const ANSWER_TIMEOUT_DEFAULT = 120;
 
 export class StreamController implements StreamControllerInterface {
-  value: MediaStream | null;
+  private _value: MediaStream | null;
   list: MediaStream[];
 
   constructor() {
-    this.value = null;
+    this._value = null;
     this.list = [];
+  }
+
+  public async getStream(): Promise<MediaStream> {
+    if (this._value) return this._value;
+    else {
+      const [stream] = await this.initLocalMediaStream();
+      return stream;
+    }
   }
 
   stopAllTracks(): void {
     this.list.forEach((stream) =>
       stream.getTracks().forEach((track) => track.stop())
     );
-    this.value = null;
+    this._value = null;
     this.list = [];
   }
 
@@ -84,7 +91,7 @@ export class StreamController implements StreamControllerInterface {
         throw err;
       }
 
-      this.value = stream;
+      this._value = stream;
       this.list.push(stream);
       return [stream, hasDevice];
     } catch (error: any) {
@@ -173,24 +180,56 @@ export class StreamController implements StreamControllerInterface {
   }
 }
 
-export class RTCCore implements RTCInterface {
+export class ProcessTimeoutController {
+  readonly name: CallErrorMessage;
+
+  private _resolve: UnknownResolve;
+  private _timeout: NodeJS.Timeout | null;
+  private readonly _timeoutSecond: number;
+
+  constructor(name: CallErrorMessage, timeoutSecond: number) {
+    this._timeoutSecond = timeoutSecond;
+    this.name = name;
+    this._timeout = null;
+    this._resolve = () => undefined;
+  }
+
+  public get resolve(): UnknownResolve {
+    return this._resolve;
+  }
+
+  public get timeout(): NodeJS.Timeout | null {
+    return this._timeout;
+  }
+
+  setTimeout(): Promise<unknown> {
+    if (this._timeout) clearTimeout(this._timeout);
+
+    const promise = new Promise((resolve, reject) => {
+      this._resolve = resolve;
+      this._timeout = setTimeout(
+        () => reject(new CallError(`Failed ${this.name}`, this.name)),
+        this._timeoutSecond * 1000
+      );
+    });
+
+    return promise;
+  }
+
+  clearTimeout() {
+    if (!this._timeout) return;
+    clearTimeout(this._timeout);
+    this._timeout = null;
+  }
+}
+
+class Level2 {
   connectionConfig: RTCConfiguration = {};
   emitter: EventsEmitter;
   params: RTCParams;
   connection: RTCConnection | null;
-  socketMessenger: SocketMessenger;
-  hasEntered: boolean;
-  hasAnswered: boolean;
-  deviceInfo: DeviceInfo;
-  isDoctor: boolean;
   streams: StreamController;
-
-  protected readonly _enterTimeoutSecond: number;
-  protected _enteringTimeout: NodeJS.Timeout | null;
-  protected _enterResolve: UnknownResolve;
-  protected readonly _answerTimeoutSecond: number;
-  protected _answerTimeout: NodeJS.Timeout | null;
-  protected _answerResolve: UnknownResolve;
+  socketMessenger: SocketMessenger;
 
   constructor(params: RTCParams, connectionConfig?: RTCConfiguration) {
     this.connectionConfig = connectionConfig || {};
@@ -198,211 +237,11 @@ export class RTCCore implements RTCInterface {
     this.streams = new StreamController();
     this.params = params;
     this.connection = null;
-    this.deviceInfo = {
-      hasCamera: false,
-      hasMicrophone: false,
-      isHidden: false,
-      isMute: false,
-    };
-    this.isDoctor = false;
-
-    this._answerTimeout = null;
-    this._answerTimeoutSecond =
-      params.answerTimeoutSecond || ANSWER_TIMEOUT_DEFAULT;
-    this.hasAnswered = false;
-    this._enterResolve = () => undefined;
-
     this.socketMessenger = new SocketMessenger(params);
-
-    this._enterTimeoutSecond =
-      params.enterTimeoutSecond || ENTER_TIMEOUT_DEFAULT;
-    this._enteringTimeout = null;
-    this.hasEntered = false;
-    this._answerResolve = () => undefined;
   }
 
-  async call(): Promise<MediaStream> {
-    const [stream, hasDevice] = await this.streams.initLocalMediaStream();
-    this.deviceInfo = { ...this.deviceInfo, ...hasDevice };
-    if (this.isDoctor) {
-      await this._sendAvailableEvent(true);
-    }
-
-    const promiseList = [this._enterProcess()];
-    if (this.isDoctor) {
-      promiseList.push(this._setAnswerTimeout());
-    }
-
-    await Promise.all(promiseList);
-    return stream;
-  }
-
-  changeDeviceState(deviceState: DeviceState): void {
-    const { value: mediaStream } = this.streams;
-    this.deviceInfo = { ...this.deviceInfo, ...deviceState };
-
-    if (mediaStream) {
-      mediaStream
-        .getAudioTracks()
-        .forEach((audioTrack) => (audioTrack.enabled = !deviceState.isMute));
-      mediaStream
-        .getVideoTracks()
-        .forEach((videoTrack) => (videoTrack.enabled = !deviceState.isHidden));
-    }
-
-    this._sendMyProps();
-  }
-
-  async socketMessageHandler(
-    message:
-      | IMessageEnter
-      | IReceiveMessageRtcSendProps
-      | IReceiveMessageVideoOffer
-      | IReceiveMessageVideoAnswer
-      | IReceiveMessageNewIceCandidate
-      | IReceiveMessageHangup
-  ): Promise<void> {
-    if (
-      Object.values(SOCKET_MESSAGES_EVENT_LIST).includes(
-        message.type as SOCKET_MESSAGES_EVENT_LIST
-      )
-    ) {
-      logger.log({
-        direction: 'in',
-        event: message.type,
-        payload: message.data,
-      });
-    }
-
-    switch (message.type) {
-      case SOCKET_MESSAGES_EVENT_LIST.ENTER:
-        if (!this._enteringTimeout) break;
-
-        clearTimeout(this._enteringTimeout);
-        this._enteringTimeout = null;
-        this.hasEntered = true;
-        this._enterResolve();
-
-        await this._enterRoomHandler(message.data);
-        break;
-
-      case SOCKET_MESSAGES_EVENT_LIST.VIDEO_OFFER:
-        if (!this.isDoctor) break;
-        if (this._answerTimeout) {
-          clearTimeout(this._answerTimeout);
-          this._answerTimeout = null;
-          this._answerResolve();
-        }
-
-        this.hasAnswered = true;
-        await this._videoOfferMessageHandler(message.data);
-        break;
-
-      case SOCKET_MESSAGES_EVENT_LIST.VIDEO_ANSWER:
-        if (this.isDoctor) break;
-        await this._videoAnswerMessageHandler(message.data);
-        break;
-
-      case SOCKET_MESSAGES_EVENT_LIST.SEND_PROPS:
-        await this._rtcRespondentPropsMessageHandler(message.data);
-        break;
-
-      case SOCKET_MESSAGES_EVENT_LIST.NEW_ICE_CANDIDATE:
-        this._newICECandidateMessageHandler(message.data);
-        break;
-
-      case SOCKET_MESSAGES_EVENT_LIST.HANG_UP:
-        await this._hangUpMessageHandler();
-        break;
-    }
-  }
-
-  async hangUp() {
-    this.streams.stopAllTracks();
-    const message = this.socketMessenger.createPublishMessage(
-      SOCKET_MESSAGES_EVENT_LIST.HANG_UP
-    );
-    await this.emitter.emit(SOCKET_MESSAGES_EVENT_LIST.HANG_UP, message);
-    await this.destroy();
-
-    if (this.isDoctor) {
-      await this._sendAvailableEvent(false);
-    }
-  }
-
-  async destroy(): Promise<void> {
-    if (this.connection) await this._closeConnection();
-
-    this._enteringTimeout && clearTimeout(this._enteringTimeout);
-    this._answerTimeout && clearTimeout(this._answerTimeout);
-  }
-
-  protected _setEntiringTimeout(): Promise<unknown> {
-    if (this._enteringTimeout) clearTimeout(this._enteringTimeout);
-
-    const enterPromise = new Promise((resolve, reject) => {
-      this._enterResolve = resolve;
-      this._enteringTimeout = setTimeout(
-        () => reject(new CallError('Failed entering', 'enter')),
-        this._enterTimeoutSecond * 1000
-      );
-    });
-
-    return enterPromise;
-  }
-
-  protected async _enterProcess(): Promise<unknown> {
-    // Отправляем событие отправки запроса на вход в комнату
-    const enterMessage = this.socketMessenger.createPublishMessage(
-      SOCKET_MESSAGES_EVENT_LIST.ENTER
-    );
-    await this.emitter.emit(SOCKET_MESSAGES_EVENT_LIST.ENTER, enterMessage);
-
-    // Устанавливаем таймаут на вхождение в комнату
-    return this._setEntiringTimeout();
-  }
-
-  protected _setAnswerTimeout(): Promise<unknown> {
-    if (this._answerTimeout) clearTimeout(this._answerTimeout);
-
-    const answerPromise = new Promise((resolve, reject) => {
-      this._answerResolve = resolve;
-      this._answerTimeout = setTimeout(
-        () => reject(new CallError('Failed answer', 'answer')),
-        this._answerTimeoutSecond * 1000
-      );
-    });
-
-    return answerPromise;
-  }
-
-  protected async _sendAvailableEvent(status: boolean): Promise<void> {
-    const { doctor } = this.params;
-    const message = this.socketMessenger.createTransientMessage(null, {
-      type: 'rtc-available-event',
-      isRespondentAvailable: status,
-      consultationId: this.params.consultationId,
-      callType: this.params.isAudio ? 'audio' : 'video',
-      doctor,
-    });
-    await this.emitter.emit(
-      SOCKET_MESSAGES_EVENT_LIST.AVAILABLE_EVENT,
-      message
-    );
-  }
-
-  protected async _getMediaStream(): Promise<MediaStream> {
-    const { value: mediaStream } = this.streams;
-    if (mediaStream) return mediaStream;
-    else {
-      const [stream, hasDevice] = await this.streams.initLocalMediaStream();
-      this.deviceInfo = { ...this.deviceInfo, ...hasDevice };
-      return stream;
-    }
-  }
-
-  protected async _closeConnection(): Promise<void> {
-    if (!this.connection) return;
+  protected async _closeConnection(): Promise<RTCConnection | null> {
+    if (!this.connection) return null;
 
     const connection = this.connection;
     this.connection = null;
@@ -410,6 +249,7 @@ export class RTCCore implements RTCInterface {
 
     await this.emitter.emit(CONNECTION_EVENT_LIST.CONNECTION_CLOSE, connection);
     connection.close();
+    return connection;
   }
 
   protected async _createPeerConnection(
@@ -424,7 +264,6 @@ export class RTCCore implements RTCInterface {
     this.connection = connection;
 
     connection.connectionId = connectionId;
-    connection.isInviter = this.isDoctor;
     connection.isClosing = false;
     connection.iceCandidatesQueue = [];
 
@@ -443,11 +282,9 @@ export class RTCCore implements RTCInterface {
     return connection;
   }
 
-  protected async _connectMember({ clientId, connectionId, name }: Member) {
+  protected async _connectMember(connectionId: uuid) {
     const connection = await this._createPeerConnection(connectionId);
-    connection.clientId = clientId;
-    connection.name = name;
-    const stream = await this._getMediaStream();
+    const stream = await this.streams.getStream();
     stream.getTracks().forEach((track) => {
       connection.addTrack(track, stream);
     });
@@ -470,6 +307,179 @@ export class RTCCore implements RTCInterface {
     this.emitter.emit(SOCKET_MESSAGES_EVENT_LIST.VIDEO_OFFER, message);
   }
 
+  // =================================================================
+  /**
+   * Обработчики события icecandidate
+   * @see https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/onicecandidate
+   * @param event {RTCPeerConnectionIceEvent}
+   * @param connection {RTCPeerConnection}
+   * @returns {void}
+   * @protected
+   */
+  protected _iceCandidateEventHandler(
+    event: RTCPeerConnectionIceEvent,
+    connection: RTCConnection
+  ): void {
+    if (!(connection && event.candidate)) return;
+
+    const message = this.socketMessenger.createTransientMessage(
+      connection.connectionId,
+      {
+        type: 'new-ice-candidate',
+        sdp: event.candidate,
+      }
+    );
+    this.emitter.emit(SOCKET_MESSAGES_EVENT_LIST.ICE_CANDIDATE_UPDATE, message);
+  }
+
+  /**
+   * Обработчики события изменения статуса ice агента
+   * @see https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/oniceconnectionstatechange
+   * @param _
+   * @param connection {RTCPeerConnection}
+   * @returns {void}
+   * @protected
+   */
+  protected _iceConnectionStateChangeEventHandler(
+    _: Event,
+    connection: RTCConnection
+  ): void {
+    if (!connection) return;
+
+    this.emitter.emit(CONNECTION_EVENT_LIST.CONNECTION_ICE_STATE, connection);
+
+    switch (connection.iceConnectionState) {
+      case 'closed':
+      case 'disconnected':
+        this.emitter.emit(EVENT_LIST.HANG_UP);
+        this._closeConnection();
+        break;
+      case 'failed':
+        this._closeConnection();
+        break;
+    }
+  }
+
+  /**
+   * Обработчик события signalingState
+   * @desc события при изменении signalingState однорангового соединения, что может произойти либо из-за вызова setLocalDescription (), либо из-за setRemoteDescription ().
+   * @see https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/onsignalingstatechange
+   * @param _
+   * @param connection {RTCPeerConnection}
+   * @returns {void}
+   * @protected
+   */
+  protected _signalingStateChangeEventHandler(
+    _: Event,
+    connection: RTCConnection
+  ): void {
+    switch (connection.signalingState) {
+      case 'closed':
+        this._closeConnection();
+        break;
+    }
+  }
+
+  /**
+   * Обработчик события datachannel в RTCPeerConnection.
+   * @desc Это событие типа RTCDataChannelEvent отправляется, когда RTCDataChannel добавляется к соединению удаленным одноранговым узлом, вызывающим createDataChannel().
+   * @see https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/ondatachannel
+   * @param event {RTCDataChannelEvent}
+   * @param connection {RTCPeerConnection}
+   * @returns {void}
+   * @protected
+   */
+  protected _dataChannelEventHandler(
+    event: RTCDataChannelEvent,
+    connection: RTCConnection
+  ): void {
+    if (!connection) return;
+
+    const dataChannel = event.channel;
+    dataChannel.onmessage = (message) => {
+      //Получаем данные из канала от МП и тут же их отправляем обратно,
+      //чтобы можно было замерить временную задержку RTC-канала на стороне МП для метрик качества связи
+      dataChannel.send(message.data);
+    };
+  }
+
+  /**
+   * Обработчик события добавления трека в RTCPeerConnection.
+   * @see https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/ontrack
+   * @param event {RTCTrackEvent}
+   * @returns {void}
+   * @protected
+   */
+  protected _trackEventHandler(event: RTCTrackEvent): void {
+    this.emitter.emit(CONNECTION_EVENT_LIST.CONNECTION_TRACK, event.streams[0]);
+
+    // this._sendMyProps();
+  }
+
+  /** Обработчик согласования сеанса на клиентской стороне.
+   *
+   * !!! не реализовывать на стороне инициатора !!!
+   * @see https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/onnegotiationneeded
+   * @returns {void}
+   * @protected
+   *
+   */
+  protected _negotiationNeededHandler(): void {
+    this._createOffer();
+  }
+}
+
+class Level1 extends Level2 {
+  deviceInfo: DeviceInfo;
+
+  protected _answerTimeoutController: ProcessTimeoutController;
+  protected _enterTimeoutController: ProcessTimeoutController;
+
+  constructor(params: RTCParams, connectionConfig?: RTCConfiguration) {
+    super(params, connectionConfig);
+    this.deviceInfo = {
+      hasCamera: false,
+      hasMicrophone: false,
+      isHidden: false,
+      isMute: false,
+    };
+
+    this._enterTimeoutController = new ProcessTimeoutController(
+      'enter',
+      params.enterTimeoutSecond || ENTER_TIMEOUT_DEFAULT
+    );
+    this._answerTimeoutController = new ProcessTimeoutController(
+      'answer',
+      params.answerTimeoutSecond || ANSWER_TIMEOUT_DEFAULT
+    );
+  }
+
+  protected async _enterProcess(): Promise<unknown> {
+    // Отправляем событие отправки запроса на вход в комнату
+    const enterMessage = this.socketMessenger.createPublishMessage(
+      SOCKET_MESSAGES_EVENT_LIST.ENTER
+    );
+    await this.emitter.emit(SOCKET_MESSAGES_EVENT_LIST.ENTER, enterMessage);
+
+    // Устанавливаем таймаут на вхождение в комнату
+    return this._enterTimeoutController.setTimeout();
+  }
+
+  protected async _sendAvailableEvent(status: boolean): Promise<void> {
+    const { doctor } = this.params;
+    const message = this.socketMessenger.createTransientMessage(null, {
+      type: 'rtc-available-event',
+      isRespondentAvailable: status,
+      consultationId: this.params.consultationId,
+      callType: this.params.isAudio ? 'audio' : 'video',
+      doctor,
+    });
+    await this.emitter.emit(
+      SOCKET_MESSAGES_EVENT_LIST.AVAILABLE_EVENT,
+      message
+    );
+  }
+
   protected _sendMyProps() {
     const message = this.socketMessenger.createTransientMessage(
       this.connection && this.connection.connectionId,
@@ -478,27 +488,18 @@ export class RTCCore implements RTCInterface {
         ...this.deviceInfo,
       }
     );
-    this.emitter.emit(SOCKET_MESSAGES_EVENT_LIST.SEND_PROPS, message).then();
+    this.emitter.emit(SOCKET_MESSAGES_EVENT_LIST.SEND_PROPS, message);
   }
 
   protected async _enterRoomHandler(data: EnterData): Promise<void> {
     const {
       iceservers,
-      sender: { connectionId, clientId },
+      sender: { connectionId },
     } = data;
 
     this.connectionConfig.iceServers = iceservers;
     this.params.connectionId = connectionId;
     this.params.name = this.params.clientId;
-
-    if (!this.isDoctor) {
-      const params = {
-        clientId,
-        connectionId: '',
-        name: this.params.name,
-      };
-      await this._connectMember(params);
-    }
   }
 
   protected _videoAnswerMessageHandler(data: IVideoAnswerData) {
@@ -520,9 +521,7 @@ export class RTCCore implements RTCInterface {
     const connection = await this._createPeerConnection(
       data.sender.connectionId
     );
-    connection.clientId = data.sender.clientId;
-    connection.name = data.sender.clientId;
-    const stream = await this._getMediaStream();
+    const stream = await this.streams.getStream();
 
     stream.getTracks().forEach((track) => {
       connection.addTrack(track, stream);
@@ -578,138 +577,147 @@ export class RTCCore implements RTCInterface {
     await this.emitter.emit(EVENT_LIST.RTC_RESPONDENT_PROPS, data);
   }
 
-  /**
-   * Обработчики события icecandidate
-   * @see https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/onicecandidate
-   * @param event {RTCPeerConnectionIceEvent}
-   * @param connection {RTCPeerConnection}
-   * @returns {void}
-   * @protected
-   */
-  protected _iceCandidateEventHandler(
-    event: RTCPeerConnectionIceEvent,
-    connection: RTCConnection
-  ): void {
-    if (!(connection && event.candidate)) return;
-
-    const message = this.socketMessenger.createTransientMessage(
-      connection.connectionId,
-      {
-        type: 'new-ice-candidate',
-        sdp: event.candidate,
-      }
-    );
-    this.emitter
-      .emit(SOCKET_MESSAGES_EVENT_LIST.ICE_CANDIDATE_UPDATE, message)
-      .then();
-  }
-
-  /**
-   * Обработчики события изменения статуса ice агента
-   * @see https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/oniceconnectionstatechange
-   * @param _
-   * @param connection {RTCPeerConnection}
-   * @returns {void}
-   * @protected
-   */
-  protected _iceConnectionStateChangeEventHandler(
-    _: Event,
-    connection: RTCConnection
-  ): void {
-    if (!connection) return;
-
-    this.emitter
-      .emit(CONNECTION_EVENT_LIST.CONNECTION_ICE_STATE, connection)
-      .then();
-
-    switch (connection.iceConnectionState) {
-      case 'closed':
-      case 'disconnected':
-        this.emitter.emit(EVENT_LIST.HANG_UP).then();
-        this._closeConnection().then();
-        break;
-      case 'failed':
-        this._closeConnection().then();
-        //попытка повторного подключения
-        if (connection.isInviter) {
-          this._connectMember({
-            clientId: connection.clientId,
-            connectionId: connection.connectionId,
-            name: connection.name,
-          }).then();
-        }
-        break;
-    }
-  }
-
-  /**
-   * Обработчик события signalingState
-   * @desc события при изменении signalingState однорангового соединения, что может произойти либо из-за вызова setLocalDescription (), либо из-за setRemoteDescription ().
-   * @see https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/onsignalingstatechange
-   * @param _
-   * @param connection {RTCPeerConnection}
-   * @returns {void}
-   * @protected
-   */
-  protected _signalingStateChangeEventHandler(
-    _: Event,
-    connection: RTCConnection
-  ): void {
-    switch (connection.signalingState) {
-      case 'closed':
-        this._closeConnection().then();
-        break;
-    }
-  }
-
-  /**
-   * Обработчик события datachannel в RTCPeerConnection.
-   * @desc Это событие типа RTCDataChannelEvent отправляется, когда RTCDataChannel добавляется к соединению удаленным одноранговым узлом, вызывающим createDataChannel().
-   * @see https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/ondatachannel
-   * @param event {RTCDataChannelEvent}
-   * @param connection {RTCPeerConnection}
-   * @returns {void}
-   * @protected
-   */
-  protected _dataChannelEventHandler(
-    event: RTCDataChannelEvent,
-    connection: RTCConnection
-  ): void {
-    if (!connection) return;
-
-    const dataChannel = event.channel;
-    dataChannel.onmessage = (message) => {
-      //Получаем данные из канала от МП и тут же их отправляем обратно,
-      //чтобы можно было замерить временную задержку RTC-канала на стороне МП для метрик качества связи
-      dataChannel.send(message.data);
-    };
-  }
-
-  /**
-   * Обработчик события добавления трека в RTCPeerConnection.
-   * @see https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/ontrack
-   * @param event {RTCTrackEvent}
-   * @returns {void}
-   * @protected
-   */
   protected _trackEventHandler(event: RTCTrackEvent): void {
-    this.emitter
-      .emit(CONNECTION_EVENT_LIST.CONNECTION_TRACK, event.streams[0])
-      .then();
-
+    super._trackEventHandler(event);
     this._sendMyProps();
   }
+}
 
-  /** Обработчик согласования сеанса на клиентской стороне.
-   *
-   * !!! не реализовывать на стороне инициатора !!!
-   * @see https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/onnegotiationneeded
-   * @returns {void}
-   * @protected
-   *
-   */
-  protected _negotiationNeededHandler(): void {
-    if (this.isDoctor) return;
-    this._createOffer();
+export class RTCCore extends Level1 implements RTCInterface {
+  hasEntered: boolean;
+  hasAnswered: boolean;
+  isDoctor: boolean;
+
+  constructor(params: RTCParams, connectionConfig?: RTCConfiguration) {
+    super(params, connectionConfig);
+    this.deviceInfo = {
+      hasCamera: false,
+      hasMicrophone: false,
+      isHidden: false,
+      isMute: false,
+    };
+    this.isDoctor = false;
+
+    this.hasAnswered = false;
+    this.hasEntered = false;
+  }
+
+  async call(): Promise<MediaStream> {
+    const [stream, hasDevice] = await this.streams.initLocalMediaStream();
+    this.deviceInfo = { ...this.deviceInfo, ...hasDevice };
+    if (this.isDoctor) {
+      await this._sendAvailableEvent(true);
+    }
+
+    const promiseList = [this._enterProcess()];
+    if (this.isDoctor) {
+      promiseList.push(this._answerTimeoutController.setTimeout());
+    }
+
+    await Promise.all(promiseList);
+    return stream;
+  }
+
+  changeDeviceState(deviceState: DeviceState): void {
+    this.streams.getStream().then((mediaStream) => {
+      this.deviceInfo = { ...this.deviceInfo, ...deviceState };
+
+      if (mediaStream) {
+        mediaStream
+          .getAudioTracks()
+          .forEach((audioTrack) => (audioTrack.enabled = !deviceState.isMute));
+        mediaStream
+          .getVideoTracks()
+          .forEach(
+            (videoTrack) => (videoTrack.enabled = !deviceState.isHidden)
+          );
+      }
+
+      this._sendMyProps();
+    });
+  }
+
+  async socketMessageHandler(
+    message:
+      | IMessageEnter
+      | IReceiveMessageRtcSendProps
+      | IReceiveMessageVideoOffer
+      | IReceiveMessageVideoAnswer
+      | IReceiveMessageNewIceCandidate
+      | IReceiveMessageHangup
+  ): Promise<void> {
+    if (
+      Object.values(SOCKET_MESSAGES_EVENT_LIST).includes(
+        message.type as SOCKET_MESSAGES_EVENT_LIST
+      )
+    ) {
+      logger.log({
+        direction: 'in',
+        event: message.type,
+        payload: message.data,
+      });
+    }
+
+    switch (message.type) {
+      case SOCKET_MESSAGES_EVENT_LIST.ENTER:
+        if (!this._enterTimeoutController.timeout) break;
+
+        this._enterTimeoutController.clearTimeout();
+        this._enterTimeoutController.resolve();
+        this.hasEntered = true;
+
+        await this._enterRoomHandler(message.data);
+        break;
+
+      case SOCKET_MESSAGES_EVENT_LIST.VIDEO_OFFER:
+        if (!this.isDoctor) break;
+        if (this._answerTimeoutController.timeout) {
+          this._answerTimeoutController.clearTimeout();
+          this._answerTimeoutController.resolve();
+        }
+
+        this.hasAnswered = true;
+        await this._videoOfferMessageHandler(message.data);
+        break;
+
+      case SOCKET_MESSAGES_EVENT_LIST.VIDEO_ANSWER:
+        if (this.isDoctor) break;
+        await this._videoAnswerMessageHandler(message.data);
+        break;
+
+      case SOCKET_MESSAGES_EVENT_LIST.SEND_PROPS:
+        await this._rtcRespondentPropsMessageHandler(message.data);
+        break;
+
+      case SOCKET_MESSAGES_EVENT_LIST.NEW_ICE_CANDIDATE:
+        this._newICECandidateMessageHandler(message.data);
+        break;
+
+      case SOCKET_MESSAGES_EVENT_LIST.HANG_UP:
+        await this._hangUpMessageHandler();
+        break;
+    }
+  }
+
+  async hangUp() {
+    this.streams.stopAllTracks();
+    const message = this.socketMessenger.createPublishMessage(
+      SOCKET_MESSAGES_EVENT_LIST.HANG_UP
+    );
+    await this.emitter.emit(SOCKET_MESSAGES_EVENT_LIST.HANG_UP, message);
+    await this.destroy();
+
+    if (this.isDoctor) {
+      await this._sendAvailableEvent(false);
+    }
+  }
+
+  async destroy(): Promise<void> {
+    if (this.connection) await this._closeConnection();
+
+    [
+      this._answerTimeoutController,
+      this._enterTimeoutController,
+    ].forEach((controller) => controller.clearTimeout());
   }
 }
