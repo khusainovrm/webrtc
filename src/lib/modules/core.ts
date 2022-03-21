@@ -223,21 +223,17 @@ export class ProcessTimeoutController {
   }
 }
 
-class Level2 {
-  connectionConfig: RTCConfiguration = {};
-  emitter: EventsEmitter;
+class RTCCoreConnection {
+  connectionConfig: RTCConfiguration;
+  streams: StreamController;
   params: RTCParams;
   connection: RTCConnection | null;
-  streams: StreamController;
-  socketMessenger: SocketMessenger;
 
   constructor(params: RTCParams, connectionConfig?: RTCConfiguration) {
     this.connectionConfig = connectionConfig || {};
-    this.emitter = new EventsEmitter();
     this.streams = new StreamController();
     this.params = params;
     this.connection = null;
-    this.socketMessenger = new SocketMessenger(params);
   }
 
   protected async _closeConnection(): Promise<RTCConnection | null> {
@@ -247,7 +243,6 @@ class Level2 {
     this.connection = null;
     connection.isClosing = true;
 
-    await this.emitter.emit(CONNECTION_EVENT_LIST.CONNECTION_CLOSE, connection);
     connection.close();
     return connection;
   }
@@ -278,7 +273,6 @@ class Level2 {
       this._dataChannelEventHandler(event, connection);
     connection.ontrack = (event) => this._trackEventHandler(event);
 
-    await this.emitter.emit(CONNECTION_EVENT_LIST.CONNECTION_NEW, connection);
     return connection;
   }
 
@@ -290,21 +284,35 @@ class Level2 {
     });
   }
 
-  protected async _createOffer() {
+  protected async _createOffer(): Promise<RTCConnection | null> {
     const { connection } = this;
-    if (!connection) return;
+    if (!connection) return null;
 
     const offer = await connection.createOffer();
     await connection.setLocalDescription(offer);
 
-    const message = this.socketMessenger.createTransientMessage(
-      connection.connectionId,
-      {
-        type: SOCKET_MESSAGES_EVENT_LIST.VIDEO_OFFER,
-        sdp: connection.localDescription,
-      }
-    );
-    this.emitter.emit(SOCKET_MESSAGES_EVENT_LIST.VIDEO_OFFER, message);
+    return connection;
+  }
+
+  protected async _createAnswer(
+    sdp: RTCSessionDescriptionInit
+  ): Promise<RTCConnection | null> {
+    const { connection } = this;
+    if (!connection) return null;
+
+    const desc = new RTCSessionDescription(sdp);
+    await connection.setRemoteDescription(desc);
+    //проставляем полученных ICE кандидатов из очереди, если таковые имеются
+    if (connection.iceCandidatesQueue.length > 0) {
+      connection.iceCandidatesQueue.forEach((candidate) => {
+        connection
+          .addIceCandidate(candidate)
+          .catch((error) => console.error(error));
+      });
+    }
+    const answer = await connection.createAnswer();
+    await connection.setLocalDescription(answer);
+    return connection;
   }
 
   // =================================================================
@@ -317,20 +325,12 @@ class Level2 {
    * @protected
    */
   protected _iceCandidateEventHandler(
-    event: RTCPeerConnectionIceEvent,
-    connection: RTCConnection
-  ): void {
-    if (!(connection && event.candidate)) return;
-
-    const message = this.socketMessenger.createTransientMessage(
-      connection.connectionId,
-      {
-        type: 'new-ice-candidate',
-        sdp: event.candidate,
-      }
-    );
-    this.emitter.emit(SOCKET_MESSAGES_EVENT_LIST.ICE_CANDIDATE_UPDATE, message);
-  }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _: RTCPeerConnectionIceEvent,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    __: RTCConnection
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
+  ): void {}
 
   /**
    * Обработчики события изменения статуса ice агента
@@ -343,21 +343,20 @@ class Level2 {
   protected _iceConnectionStateChangeEventHandler(
     _: Event,
     connection: RTCConnection
-  ): void {
-    if (!connection) return;
-
-    this.emitter.emit(CONNECTION_EVENT_LIST.CONNECTION_ICE_STATE, connection);
+  ): RTCConnection {
+    if (!connection) return connection;
 
     switch (connection.iceConnectionState) {
       case 'closed':
       case 'disconnected':
-        this.emitter.emit(EVENT_LIST.HANG_UP);
         this._closeConnection();
         break;
       case 'failed':
         this._closeConnection();
         break;
     }
+
+    return connection;
   }
 
   /**
@@ -406,15 +405,15 @@ class Level2 {
   /**
    * Обработчик события добавления трека в RTCPeerConnection.
    * @see https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/ontrack
-   * @param event {RTCTrackEvent}
+   * @param _event {RTCTrackEvent}
    * @returns {void}
    * @protected
    */
-  protected _trackEventHandler(event: RTCTrackEvent): void {
-    this.emitter.emit(CONNECTION_EVENT_LIST.CONNECTION_TRACK, event.streams[0]);
-
-    // this._sendMyProps();
-  }
+  protected _trackEventHandler(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _event: RTCTrackEvent
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
+  ): void {}
 
   /** Обработчик согласования сеанса на клиентской стороне.
    *
@@ -429,7 +428,90 @@ class Level2 {
   }
 }
 
-class Level1 extends Level2 {
+class RTCCoreConnectionWithEvents extends RTCCoreConnection {
+  emitter: EventsEmitter;
+  socketMessenger: SocketMessenger;
+
+  constructor(params: RTCParams, connectionConfig?: RTCConfiguration) {
+    super(params, connectionConfig);
+    this.emitter = new EventsEmitter();
+    this.socketMessenger = new SocketMessenger(params);
+  }
+
+  protected async _closeConnection(): Promise<RTCConnection | null> {
+    const connection = await super._closeConnection();
+    if (connection) {
+      await this.emitter.emit(
+        CONNECTION_EVENT_LIST.CONNECTION_CLOSE,
+        connection
+      );
+    }
+    return connection;
+  }
+
+  protected async _createPeerConnection(
+    connectionId: uuid
+  ): Promise<RTCConnection> {
+    const connection = await super._createPeerConnection(connectionId);
+    await this.emitter.emit(CONNECTION_EVENT_LIST.CONNECTION_NEW, connection);
+    return connection;
+  }
+
+  protected async _createOffer(): Promise<RTCConnection | null> {
+    const connection = await super._createOffer();
+    if (!connection) return connection;
+
+    const message = this.socketMessenger.createTransientMessage(
+      connection.connectionId,
+      {
+        type: SOCKET_MESSAGES_EVENT_LIST.VIDEO_OFFER,
+        sdp: connection.localDescription,
+      }
+    );
+    this.emitter.emit(SOCKET_MESSAGES_EVENT_LIST.VIDEO_OFFER, message);
+    return connection;
+  }
+
+  protected _iceCandidateEventHandler(
+    event: RTCPeerConnectionIceEvent,
+    connection: RTCConnection
+  ): void {
+    super._iceCandidateEventHandler(event, connection);
+    if (!(connection && event.candidate)) return;
+
+    const message = this.socketMessenger.createTransientMessage(
+      connection.connectionId,
+      {
+        type: 'new-ice-candidate',
+        sdp: event.candidate,
+      }
+    );
+    this.emitter.emit(SOCKET_MESSAGES_EVENT_LIST.ICE_CANDIDATE_UPDATE, message);
+  }
+
+  protected _iceConnectionStateChangeEventHandler(
+    event: Event,
+    connection: RTCConnection
+  ): RTCConnection {
+    super._iceConnectionStateChangeEventHandler(event, connection);
+
+    if (!connection) return connection;
+    this.emitter.emit(CONNECTION_EVENT_LIST.CONNECTION_ICE_STATE, connection);
+
+    if (connection.iceConnectionState === 'disconnected') {
+      this.emitter.emit(EVENT_LIST.HANG_UP);
+    }
+
+    return connection;
+  }
+
+  protected _trackEventHandler(event: RTCTrackEvent): void {
+    super._trackEventHandler(event);
+    this.emitter.emit(CONNECTION_EVENT_LIST.CONNECTION_TRACK, event.streams[0]);
+  }
+}
+
+class RTCBase extends RTCCoreConnectionWithEvents {
   deviceInfo: DeviceInfo;
 
   protected _answerTimeoutController: ProcessTimeoutController;
@@ -527,20 +609,8 @@ class Level1 extends Level2 {
       connection.addTrack(track, stream);
     });
 
-    const desc = new RTCSessionDescription(data.sdp);
     try {
-      await connection.setRemoteDescription(desc);
-      //проставляем полученных ICE кандидатов из очереди, если таковые имеются
-      if (connection.iceCandidatesQueue.length > 0) {
-        connection.iceCandidatesQueue.forEach((candidate) => {
-          connection
-            .addIceCandidate(candidate)
-            .catch((error) => console.error(error));
-        });
-      }
-      const answer = await connection.createAnswer();
-      await connection.setLocalDescription(answer);
-
+      await this._createAnswer(data.sdp);
       const message = this.socketMessenger.createTransientMessage(
         data.sender.connectionId,
         {
@@ -583,7 +653,7 @@ class Level1 extends Level2 {
   }
 }
 
-export class RTCCore extends Level1 implements RTCInterface {
+export class RTCCore extends RTCBase implements RTCInterface {
   hasEntered: boolean;
   hasAnswered: boolean;
   isDoctor: boolean;
@@ -715,9 +785,8 @@ export class RTCCore extends Level1 implements RTCInterface {
   async destroy(): Promise<void> {
     if (this.connection) await this._closeConnection();
 
-    [
-      this._answerTimeoutController,
-      this._enterTimeoutController,
-    ].forEach((controller) => controller.clearTimeout());
+    [this._answerTimeoutController, this._enterTimeoutController].forEach(
+      (controller) => controller.clearTimeout()
+    );
   }
 }

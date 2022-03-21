@@ -15,11 +15,12 @@ export class RTCDoctor extends RTCCore {
   protected _iceConnectionStateChangeEventHandler(
     event: Event,
     connection: RTCConnection
-  ): void {
+  ): RTCConnection {
     super._iceConnectionStateChangeEventHandler(event, connection);
     if (connection.iceConnectionState === 'failed') {
       this._connectMember(connection.connectionId);
     }
+    return connection;
   }
 }
 
