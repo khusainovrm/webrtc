@@ -4,7 +4,7 @@
 Библиотека представляет собой внутренний npm-пакет, который содержит:
 
 - ✅ класс `RTCDoctor` для работы консультаций на стороне ЛК Врача
-- 🚧 класс `RTCClient` для работы консультаций на стороне клиента (Скоро будет)
+- ✅ класс `RTCClient` для работы консультаций на стороне клиента
 
 ###### 🚨 Обновление версии библиотеки происходит через интерфейс gitlab, поэтому поднимать версию пакета вручную в package.json НЕ требуется.
 
@@ -29,7 +29,7 @@ import {
 // Создаем инстанс доктора
 const wrtc_doctor = new RTCDoctor(params);
 
-// Устанавливам состояние девайсов (Опционально)
+// Устанавливает состояние девайсов (Опционально)
 wrtc_doctor.changeDeviceState({
   isHidden: true,
   isMute: false,
@@ -59,7 +59,58 @@ try {
     }
 }
 
-// Чтобы получить логи используейте инстанс логера `logger`
+// Чтобы получить логи используйте инстанс логера `logger`
+console.log(logger.getConnectionEvents())
+console.log(logger.filter( l => l.event === 'enter'))
+```
+
+#### ЛК Клиента
+
+```typescript
+
+// Импортируем класс webrtc для ЛК Врача, события и инстанс логерра
+import {
+    RTCClient,
+    CallError,
+    EVENT_LIST,
+    SOCKET_MESSAGES_EVENT_LIST,
+    CONNECTION_EVENT_LIST,
+    logger,
+} from '@frontend/budu-webrtc';
+
+// Создаем инстанс доктора
+const wrtc_client = new RTCClient(params);
+
+// Устанавливаем состояние девайсов (Опционально)
+wrtc_client.changeDeviceState({
+  isHidden: true,
+  isMute: false,
+});
+
+// Подписываемся на необходимые события
+wrtc_client.emitter.on(EVENT_LIST.HANG_UP, event => {...});
+wrtc_client.emitter.on(CONNECTION_EVENT_LIST.CONNECTION_ICE_STATE, event => {...});
+wrtc_client.emitter.on(SOCKET_MESSAGES_EVENT_LIST.ENTER, event => {...});
+// ...Или можно подписаться на все события и фильтровать уже в обработчике
+wrtc_client.emitter.on(EVENT_LIST.ALL, event => {
+    switch (event.eventType) {
+        case EVENT_LIST.HANG_UP: return HangUpHandler(event)
+        case CONNECTION_EVENT_LIST.CONNECTION_ICE_STATE: return ConnectionIceStateHandler(event)
+        case SOCKET_MESSAGES_EVENT_LIST.ENTER: return SocketEnterHandler(event)
+    }
+});
+
+// Чтобы ответить вызов необходимо вызвать метод `call`
+try {
+    const localStream = await wrtc_client.call();
+} catch (error: CallError) {
+    switch (err.type) {
+      case 'enter': ...
+      case 'streamError': ...
+    }
+}
+
+// Чтобы получить логи используйте инстанс логера `logger`
 console.log(logger.getConnectionEvents())
 console.log(logger.filter( l => l.event === 'enter'))
 ```
@@ -70,9 +121,9 @@ console.log(logger.filter( l => l.event === 'enter'))
 
 ### Базовые классы
 
-#### class [`RTCDoctor`](#class-rtc-doctor) <a name="class-rtc-doctor"></a>
+#### class [`RTCCore`](#class-rtc-core) <a name="class-rtc-core"></a>
 
-Обеспечивает пул соединений на стороне врача.
+Обеспечивает пул соединений на стороне.
 
 ```typescript
 export interface RTCCoreInterface {
@@ -94,55 +145,55 @@ export interface RTCCoreInterface {
 }
 ```
 
-**_param `RTCDoc.connectionConfig` - [`RTCConfiguration`](https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/RTCPeerConnection)_**
-Конфиг для создания интанса `RTCPeerConnection`
+**_param `RTCCore.connectionConfig` - [`RTCConfiguration`](https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/RTCPeerConnection)_**
+Конфиг для создания инстанса `RTCPeerConnection`
 
 ```typescript
 new RTCPeerConnection(this.connectionConfig);
 ```
 
-**_param `RTCDoc.emitter` - [`EventsEmitter`](#class-events-emitter)_**
+**_param `RTCCore.emitter` - [`EventsEmitter`](#class-events-emitter)_**
 Инстанс класса [`EventsEmitter`](#class-events-emitter) для работы с событиями
-**_param `RTCDoc.params` - [`RTCParams`](#type-rtc-doc-params)_**
+**_param `RTCCore.params` - [`RTCParams`](#type-rtc-doc-params)_**
 Вспомогательная информация
 
 > смотреть описания типа [`RTCParams`](#type-rtc-doc-params)
 
-**_param `RTCDoc.mediaStream` - [`MediaStream`](https://developer.mozilla.org/en-US/docs/Web/API/MediaStream) | null_**
-**_param `RTCDoc.allMediaStreams` - [`MediaStream`](https://developer.mozilla.org/en-US/docs/Web/API/MediaStream)[]_**
+**_param `RTCCore.mediaStream` - [`MediaStream`](https://developer.mozilla.org/en-US/docs/Web/API/MediaStream) | null_**
+**_param `RTCCore.allMediaStreams` - [`MediaStream`](https://developer.mozilla.org/en-US/docs/Web/API/MediaStream)[]_**
 
-**_param `RTCDoc.connection` - [`RTCConnection`](#type-rtc-connection) | null_**
+**_param `RTCCore.connection` - [`RTCConnection`](#type-rtc-connection) | null_**
 Инстанс RTC соединения
 
-**_param `RTCDoc.socketMessenger` - [`ISocketMessenger`](#type-socket-messanger)_**
-Инстанс класса [`SocketMessenger`](#class-socket-messager) для генерации сокетных сообщений
+**_param `RTCCore.socketMessenger` - [`ISocketMessenger`](#type-socket-messenger)_**
+Инстанс класса [`SocketMessenger`](#class-socket-messenger) для генерации сокетных сообщений
 
-**_param `RTCDoc.hasEntered` - boolean_**
+**_param `RTCCore.hasEntered` - boolean_**
 Флаг говорящий о успешном вхождение в комнату
 
-**_param `RTCDoc.hasAnswered` - boolean_**
+**_param `RTCCore.hasAnswered` - boolean_**
 Флаг говорящий о успешном ответе кандидата
 
-**_metod `call(): Promise<MediaStream>`_**
+**_method `RTCCore.call(): Promise<MediaStream>`_**
 Инициация звонка кандидату:
 
 - Вхождение в комнату
 - Ожидание офера и ответ на него
-  Возвращает пропис с локальным медиа-стримом типа [`MediaStream`](https://developer.mozilla.org/en-US/docs/Web/API/MediaStream)
+  Возвращает Promise с локальным [`MediaStream`](https://developer.mozilla.org/en-US/docs/Web/API/MediaStream)
 
-Возможны ощибки типа [`CallError`](#class-call-error) (смотреть описание типа)
+Возможны ошибки типа [`CallError`](#class-call-error) (смотреть описание типа)
 
-**_metod `socketMessageHandler(message: SocketMessage): Promise<void>`_**
+**_method `RTCCore.socketMessageHandler(message: SocketMessage): Promise<void>`_**
 Обработка серверных сообщений.
 Принимает сокетное сообщение [`SocketMessage`](#type-socket-message)
 
-**_metod `changeDeviceState(props: DeviceState): void`_**
+**_method `RTCCore.changeDeviceState(props: DeviceState): void`_**
 Функция для изменения состояния audio и video треков по флагам [`DeviceState`](#type-device-state)
 
-**_metod `hangUp(): void`_**
+**_method `RTCCore.hangUp(): void`_**
 Остановка треков стрима и отправка сокетного события об отключении
 
-**_metod `destroy(): void`_**
+**_method `RTCCore.destroy(): void`_**
 Закрытие всех соединений
 
 #### class [`CallError`](#class-call-error) <a name="class-call-error"></a>
@@ -169,8 +220,8 @@ export class CallError extends Error implements CallErrorType {
 
 #### class [`EventsEmitter`](#class-events-emitter) <a name="class-events-emitter"></a>
 
-Класс для работы с событиями библеотеки.
-Возможность подписываться, отписываться и вызовать сообщения
+Класс для работы с событиями библиотеки.
+Возможность подписываться, отписываться и вызывать сообщения
 
 ```typescript
 export interface IEventsEmitter {
@@ -195,9 +246,9 @@ export interface IEventsEmitter {
 ```
 
 **_param `EventsEmitter.events` - [`EventsDict`](#type-events-dict)_**
-Объект событий, где ключ названия события([`EventList`](#type-event-list)) а значение массив колбеков ([`EventCallback`](#type-event-callback)) для этого события
+Объект событий, где ключ - [`EventList`](#type-event-list), а значение - массив [`EventCallback`](#type-event-callback) для этого события
 
-#### class [`SocketMessenger`](#class-socket-messager) <a name="class-socket-messager"></a>
+#### class [`SocketMessenger`](#class-socket-messenger) <a name="class-socket-messenger"></a>
 
 ```typescript
   createPublishMessage<K extends SOCKET_MESSAGES_EVENT_LIST>(
@@ -408,7 +459,7 @@ export type IEvent<T, P> = {
 };
 ```
 
-#### type [`ISocketMessenger`](#type-socket-messanger) <a name="type-socket-messanger"></a>
+#### type [`ISocketMessenger`](#type-socket-messenger) <a name="type-socket-messenger"></a>
 
 ```typescript
 export type ISocketMessenger = {
@@ -443,7 +494,7 @@ export enum EMIT_TYPE_LIST {
 https://confluence.renhealth.com/pages/viewpage.action?pageId=46654678
 
 Обычная возникают проблемы с установкой npm пакетов локально на компьютерах разработчиков.
-Локально пакеты из нашего npm-хранилища можно установливать только при налиции авторизации,
+Локально пакеты из нашего npm-хранилища можно устанавливать только при наличии авторизации,
 иначе при запросе _npm i @frontend/budu-webrtc_ можно получить ошибку 404.
 
 Для правильной авторизации создаем (если еще нету) файл .npmrc в домашней директории (для Windows это папка C:\Users\ваше.имя, а для unix-систем /home/{username}/.npmrc) и добавляем в него:
