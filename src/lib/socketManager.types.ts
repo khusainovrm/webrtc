@@ -1,7 +1,7 @@
 'use strict';
 
 import { SOCKET_MESSAGES_EVENT_LIST } from './events';
-import { DeviceInfo, HasDevice } from './modules/doctor.types';
+import { DeviceInfo, HasDevice } from './modules/core.types';
 
 export type uuid = string;
 
@@ -66,6 +66,7 @@ export type RtcSendPropsString = 'rtc-send-props';
 export type EnterString = 'enter';
 export type RtcAvailableEventString = 'rtc-available-event';
 export type VideoOfferString = 'video-offer';
+export type VideoAnswerString = SOCKET_MESSAGES_EVENT_LIST.VIDEO_ANSWER;
 export type NewIceCandidateString = 'new-ice-candidate';
 export type HangupString = 'hangup';
 
@@ -103,6 +104,14 @@ export type IVideoOfferData = HasDevice & {
   };
   sender: ISender;
 };
+export type IVideoAnswerData = {
+  type: VideoAnswerString;
+  sdp: {
+    sdp: string;
+    type: 'answer';
+  };
+  sender: ISender;
+};
 
 export type INewIceCandidateData = HasDevice & {
   isRtcSupport: boolean;
@@ -133,6 +142,10 @@ export type ITransmitMessageRtcAvailableEvent = ISocketTransientMessage<
 export type IReceiveMessageVideoOffer = IReceiveMessage<
   VideoOfferString,
   IVideoOfferData
+>;
+export type IReceiveMessageVideoAnswer = IReceiveMessage<
+  SOCKET_MESSAGES_EVENT_LIST.VIDEO_ANSWER,
+  IVideoAnswerData
 >;
 export type IReceiveMessageNewIceCandidate = IReceiveMessage<
   NewIceCandidateString,

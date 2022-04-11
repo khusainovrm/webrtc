@@ -80,9 +80,10 @@ export class EventsEmitter implements IEventsEmitter {
     callbacks.forEach((cb) => cb(event));
 
     if (eventType !== EVENT_LIST.ALL) {
-      this.events[EVENT_LIST.ALL].forEach(
-        (cb: EventCallbackMap[EVENT_LIST.ALL]) =>
-          cb(event as EventMap[EVENT_LIST.ALL])
+      this.events[
+        EVENT_LIST.ALL
+      ].forEach((cb: EventCallbackMap[EVENT_LIST.ALL]) =>
+        cb(event as EventMap[EVENT_LIST.ALL])
       );
     }
   }

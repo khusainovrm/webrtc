@@ -23,7 +23,7 @@ export type DoctorInfo = {
   specialityName: string;
 };
 
-export type IRTCDoctorParams = {
+export type RTCParams = {
   name: string;
   clientId: string;
   connectionId: string | null;
@@ -37,24 +37,15 @@ export type IRTCDoctorParams = {
 };
 
 export type RTCConnection = RTCPeerConnection & {
-  clientId: string;
   connectionId: string;
-  name: string;
   iceCandidatesQueue: RTCIceCandidate[];
-  isInviter: boolean;
   isClosing: boolean;
-  negotiating: boolean;
 };
 
-export type NewConnection = {
-  connectionId: uuid;
-  isInviter: boolean;
-};
-
-export interface IRTCDoctor {
+export interface RTCCoreInterface {
   connectionConfig: RTCConfiguration;
   emitter: IEventsEmitter;
-  params: IRTCDoctorParams;
+  params: RTCParams;
   mediaStream: MediaStream | null;
   allMediaStreams: MediaStream[];
   connection: RTCConnection | null;
@@ -91,3 +82,32 @@ export type CallErrorType = Error & {
   type: CallErrorMessage;
   description?: string | null;
 };
+
+export interface StreamControllerInterface {
+  list: MediaStream[];
+
+  initLocalMediaStream(): Promise<[MediaStream, HasDevice]>;
+  getStream(): Promise<MediaStream>;
+  stopAllTracks(): void;
+}
+
+export interface RTCInterface {
+  connectionConfig: RTCConfiguration;
+  emitter: IEventsEmitter;
+  streams: StreamControllerInterface;
+  params: RTCParams;
+  connection: RTCConnection | null;
+  socketMessenger: ISocketMessenger;
+  hasEntered: boolean;
+  hasAnswered: boolean;
+
+  call(): Promise<MediaStream>;
+
+  socketMessageHandler(message: SocketMessage): Promise<void>;
+
+  changeDeviceState(props: DeviceState): void;
+
+  hangUp(): void;
+
+  destroy(): void;
+}
