@@ -547,7 +547,7 @@ class RTCBase extends RTCCoreConnectionWithEvents {
             params: this.params,
             connection: payload,
             deviceInfo: this.deviceInfo,
-            timeout: 2000,
+            timeout: 4000,
           }),
         ]
       );
