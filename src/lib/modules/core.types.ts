@@ -2,6 +2,7 @@
 
 import { IEventsEmitter } from '../emitter.types';
 import { ISocketMessenger, SocketMessage } from '../socketManager.types';
+import { BaseMetric } from '../utils/metrics';
 
 export type uuid = string;
 
@@ -40,6 +41,7 @@ export type RTCConnection = RTCPeerConnection & {
   connectionId: string;
   iceCandidatesQueue: RTCIceCandidate[];
   isClosing: boolean;
+  metrics: BaseMetric[];
 };
 
 export interface RTCCoreInterface {

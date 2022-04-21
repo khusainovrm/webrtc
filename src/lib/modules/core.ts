@@ -240,6 +240,9 @@ class RTCCoreConnection {
     if (!this.connection) return null;
 
     const connection = this.connection;
+    connection.metrics.forEach(
+      (metric) => metric.isSubscribed && metric.unsubscribe()
+    );
     this.connection = null;
     connection.isClosing = true;
 
@@ -261,6 +264,7 @@ class RTCCoreConnection {
     connection.connectionId = connectionId;
     connection.isClosing = false;
     connection.iceCandidatesQueue = [];
+    connection.metrics = [];
 
     connection.onnegotiationneeded = () => this._negotiationNeededHandler();
     connection.onicecandidate = (event) =>
