@@ -30,13 +30,12 @@ export type ConnectionIceStateEventData = RTCConnection;
 export type ConnectionTrackEventData = MediaStream;
 export type HangUpReceiveEventData = void;
 export type RtcRespondentPropsEventData = IRtcSendPropsData;
+export type SendMetricEventData = any;
 
-export type SocketEnterEventData = IPublishMessage<
-  SOCKET_MESSAGES_EVENT_LIST.ENTER
->;
-export type GetVisitorsEventData = IPublishMessage<
-  SOCKET_MESSAGES_EVENT_LIST.GET_VISITORS
->;
+export type SocketEnterEventData =
+  IPublishMessage<SOCKET_MESSAGES_EVENT_LIST.ENTER>;
+export type GetVisitorsEventData =
+  IPublishMessage<SOCKET_MESSAGES_EVENT_LIST.GET_VISITORS>;
 export type ActivvisitorsEventData = void;
 export type IceCandidateUpdateEventData = TransientMessage;
 export type AvailableEventEventData = TransientMessage;
@@ -44,9 +43,8 @@ export type SendPropsEventData = TransientMessage;
 export type VideoAnswerEventData = TransientMessage;
 export type VideoOfferEventData = TransientMessage;
 export type NewIceCandidateEventData = void;
-export type HangUpEventData = IPublishMessage<
-  SOCKET_MESSAGES_EVENT_LIST.HANG_UP
->;
+export type HangUpEventData =
+  IPublishMessage<SOCKET_MESSAGES_EVENT_LIST.HANG_UP>;
 
 export type IEvent<T, P> = {
   emitType: EMIT_TYPE_LIST;
@@ -62,6 +60,7 @@ export type EventDataMap = {
   [EVENT_LIST.ALL]: AllEventData;
   [EVENT_LIST.HANG_UP]: HangUpReceiveEventData;
   [EVENT_LIST.RTC_RESPONDENT_PROPS]: RtcRespondentPropsEventData;
+  [EVENT_LIST.SEND_METRIC]: SendMetricEventData;
 
   [CONNECTION_EVENT_LIST.CONNECTION_CLOSE]: ConnectionCloseEventData;
   [CONNECTION_EVENT_LIST.CONNECTION_NEW]: ConnectionNewEventData;

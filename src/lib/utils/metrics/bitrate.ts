@@ -121,6 +121,7 @@ export class BitrateMetric extends BaseMetric {
         newStats,
         availableOutgoingBitrate
       );
+      this._sendMetric('budu-webrtc-bitrate', metric);
     }
 
     this.prevStats = newStats;

@@ -22,6 +22,7 @@ export enum EVENT_LIST {
   ALL = 'allEvent',
   HANG_UP = 'hangUpReceiveEvent',
   RTC_RESPONDENT_PROPS = 'rtcRespondentPropsEvent',
+  SEND_METRIC = 'sendMetricEvent',
 }
 
 export default {

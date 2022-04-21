@@ -1,3 +1,4 @@
+import { eventsEmitter, EventsEmitter } from '../../emitter';
 import { RTCConnection, RTCParams } from '../../modules/core.types';
 
 import { MetricParams, MetricTypesEnum, Stats, StatsTypes } from './types';
@@ -9,6 +10,7 @@ export class BaseMetric {
   protected _params: RTCParams;
   protected _connection: RTCConnection;
   protected _timeout: NodeJS.Timeout | undefined;
+  protected _emitter: EventsEmitter;
 
   constructor({ params, connection, timeout }: MetricParams) {
     this._params = params;
@@ -16,6 +18,7 @@ export class BaseMetric {
     this.timeout = timeout;
     this.subscribe();
     this.type = MetricTypesEnum.BASE;
+    this._emitter = eventsEmitter;
   }
 
   get isSubscribed() {
@@ -37,6 +40,16 @@ export class BaseMetric {
 
   public unsubscribe(): void {
     if (this._timeout) clearTimeout(this._timeout);
+  }
+
+  protected _sendMetric(type: string, metric: any): void {
+    const emitter = this._emitter;
+    const payload = {
+      type,
+      data: metric,
+      timestamp: Date.now(),
+    };
+    emitter.emit(emitter.eventsMap.EVENT_LIST.SEND_METRIC, payload);
   }
 
   protected async _getStats(): Promise<Stats> {

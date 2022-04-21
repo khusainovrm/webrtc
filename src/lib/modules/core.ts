@@ -1,4 +1,4 @@
-import { EventsEmitter } from '../emitter';
+import { EventsEmitter, eventsEmitter } from '../emitter';
 import {
   CONNECTION_EVENT_LIST,
   EVENT_LIST,
@@ -439,7 +439,7 @@ class RTCCoreConnectionWithEvents extends RTCCoreConnection {
 
   constructor(params: RTCParams, connectionConfig?: RTCConfiguration) {
     super(params, connectionConfig);
-    this.emitter = new EventsEmitter();
+    this.emitter = eventsEmitter;
     this.socketMessenger = new SocketMessenger(params);
   }
 
