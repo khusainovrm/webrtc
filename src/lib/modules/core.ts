@@ -18,6 +18,7 @@ import {
   IVideoOfferData,
 } from '../socketManager.types';
 import { logger } from '../utils/logging';
+import { BitrateMetric } from '../utils/metrics/bitrate';
 
 import {
   CallErrorMessage,
@@ -538,6 +539,19 @@ class RTCBase extends RTCCoreConnectionWithEvents {
       'answer',
       params.answerTimeoutSecond || ANSWER_TIMEOUT_DEFAULT
     );
+
+    this.emitter.on(CONNECTION_EVENT_LIST.CONNECTION_NEW, ({ payload }) => {
+      payload.metrics.push(
+        ...[
+          new BitrateMetric({
+            params: this.params,
+            connection: payload,
+            deviceInfo: this.deviceInfo,
+            timeout: 2000,
+          }),
+        ]
+      );
+    });
   }
 
   protected async _enterProcess(): Promise<unknown> {
