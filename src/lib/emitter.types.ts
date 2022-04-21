@@ -30,7 +30,11 @@ export type ConnectionIceStateEventData = RTCConnection;
 export type ConnectionTrackEventData = MediaStream;
 export type HangUpReceiveEventData = void;
 export type RtcRespondentPropsEventData = IRtcSendPropsData;
-export type SendMetricEventData = any;
+export type SendMetricEventData = {
+  type: string;
+  data: any;
+  timestamp: number;
+};
 
 export type SocketEnterEventData =
   IPublishMessage<SOCKET_MESSAGES_EVENT_LIST.ENTER>;
