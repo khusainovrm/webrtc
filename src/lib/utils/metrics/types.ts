@@ -31,44 +31,6 @@ export enum MetricTypesEnum {
   BITRATE = 'bitrate',
 }
 
-export type MediaType = 'audio' | 'video';
-export type BitrateMetricType = {
-  outbound: {
-    video: {
-      bytes: number;
-      mediaType: MediaType;
-      timestamp: number;
-      qualityLimitation?: {
-        qualityLimitationDurations: {
-          other: number;
-          cpu: number;
-          bandwidth: number;
-          none: number;
-        };
-        qualityLimitationReason: string;
-        qualityLimitationResolutionChanges: number;
-      };
-    };
-    audio: {
-      bytes: number;
-      mediaType: MediaType;
-      timestamp: number;
-    };
-  };
-  inbound: {
-    video: {
-      bytes: number;
-      mediaType: MediaType;
-      timestamp: number;
-    };
-    audio: {
-      bytes: number;
-      mediaType: MediaType;
-      timestamp: number;
-    };
-  };
-};
-
 export type BitrateMetricParams = {
   deviceInfo: DeviceInfo;
 } & MetricParams;

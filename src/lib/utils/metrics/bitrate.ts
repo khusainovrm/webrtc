@@ -1,17 +1,20 @@
 import { DeviceInfo } from '../../modules/core.types';
 
-import {
-  BitrateMetricParams,
-  BitrateMetricType,
-  MediaType,
-  MetricTypesEnum,
-  Stats,
-} from './types';
+import { BitrateMetricParams, MetricTypesEnum, Stats } from './types';
 
 import { BaseMetric } from '.';
 
+type ProcessedBoundRtpData = ReturnType<BitrateMetric['_getBoundRtpData']>;
+type BoundRtpData = {
+  out: ProcessedBoundRtpData;
+  in: ProcessedBoundRtpData;
+};
+type Bitrate = ReturnType<BitrateMetric['_collectBitrate']>;
+type AvailableOutgoingBitrate = ReturnType<
+  BitrateMetric['_getAvailableOutgoingBitrate']
+>;
 export class BitrateMetric extends BaseMetric {
-  prevStats: BitrateMetricType | null;
+  prevStats: BoundRtpData | null;
   deviceInfo: DeviceInfo;
 
   constructor(params: BitrateMetricParams) {
@@ -28,13 +31,18 @@ export class BitrateMetric extends BaseMetric {
   }
 
   private _getBoundRtpData(stats: Stats, type: 'out' | 'in') {
+    type ProcessedBoundRtpAudio = ReturnType<typeof getData>;
+    type ProcessedBoundRtpVideo = ProcessedBoundRtpAudio & {
+      qualityLimitation?: ReturnType<typeof getQualityLimitationData>;
+    };
+
     const isOut = type === 'out';
     const boundRtpList = stats[isOut ? 'outbound-rtp' : 'inbound-rtp'];
 
-    const findByMedia = (list: Array<any>, mediaType: MediaType) =>
+    const findByMedia = (list: Array<any>, mediaType: 'audio' | 'video') =>
       list.find((l) => l.mediaType === mediaType);
 
-    const getData = (dataRaw: any) => ({
+    const getData = (dataRaw: ReturnType<typeof findByMedia>) => ({
       bytes: isOut ? dataRaw?.bytesSent : dataRaw?.bytesReceived,
       mediaType: dataRaw?.mediaType,
       timestamp: dataRaw?.timestamp,
@@ -50,12 +58,11 @@ export class BitrateMetric extends BaseMetric {
     const boundRtpVideo = findByMedia(boundRtpList, 'video');
     const boundRtpAudio = findByMedia(boundRtpList, 'audio');
 
-    const video = getData(boundRtpVideo);
-    const audio = getData(boundRtpAudio);
+    const audio: ProcessedBoundRtpAudio = getData(boundRtpAudio);
+    const video: ProcessedBoundRtpVideo = getData(boundRtpVideo);
 
     if (isOut) {
-      (video as any).qualityLimitation =
-        getQualityLimitationData(boundRtpVideo);
+      video.qualityLimitation = getQualityLimitationData(boundRtpVideo);
     }
 
     return {
@@ -69,46 +76,53 @@ export class BitrateMetric extends BaseMetric {
     return candidatePair.availableOutgoingBitrate;
   }
 
+  protected _collectBitrate(prevStats: BoundRtpData, newStats: BoundRtpData) {
+    return {
+      out: {
+        video: this._calcBitrate(prevStats.out.video, newStats.out.video),
+        audio: this._calcBitrate(prevStats.out.audio, newStats.out.audio),
+      },
+      in: {
+        video: this._calcBitrate(prevStats.in.video, newStats.in.video),
+        audio: this._calcBitrate(prevStats.in.audio, newStats.in.audio),
+      },
+    };
+  }
+
+  protected _collectMetric(
+    bitrate: Bitrate,
+    newStats: BoundRtpData,
+    availableOutgoingBitrate: AvailableOutgoingBitrate
+  ) {
+    return {
+      info: this._info,
+      effectiveType: (navigator?.connection as any).effectiveType,
+      availableOutgoingBitrate,
+      qualityLimitation: newStats.out.video.qualityLimitation,
+      deviceInfo: this.deviceInfo,
+      bitrate,
+    };
+  }
+
   public async handler(): Promise<void> {
     const rawStats = await this._getStats();
 
-    const stats: BitrateMetricType = {
-      outbound: this._getBoundRtpData(rawStats, 'out'),
-      inbound: this._getBoundRtpData(rawStats, 'in'),
+    const newStats: BoundRtpData = {
+      out: this._getBoundRtpData(rawStats, 'out'),
+      in: this._getBoundRtpData(rawStats, 'in'),
     };
 
     if (this.prevStats) {
-      const metric = {
-        info: this._info,
-        effectiveType: (navigator?.connection as any).effectiveType,
-        availableOutgoingBitrate: this._getAvailableOutgoingBitrate(rawStats),
-        qualityLimitation: stats.outbound.video.qualityLimitation,
-        deviceInfo: this.deviceInfo,
-        bitrate: {
-          out: {
-            video: this._calcBitrate(
-              this.prevStats.outbound.video,
-              stats.outbound.video
-            ),
-            audio: this._calcBitrate(
-              this.prevStats.outbound.audio,
-              stats.outbound.audio
-            ),
-          },
-          in: {
-            video: this._calcBitrate(
-              this.prevStats.inbound.video,
-              stats.inbound.video
-            ),
-            audio: this._calcBitrate(
-              this.prevStats.inbound.audio,
-              stats.inbound.audio
-            ),
-          },
-        },
-      };
+      const bitrateData = this._collectBitrate(this.prevStats, newStats);
+      const availableOutgoingBitrate =
+        this._getAvailableOutgoingBitrate(rawStats);
+      const metric = this._collectMetric(
+        bitrateData,
+        newStats,
+        availableOutgoingBitrate
+      );
     }
 
-    this.prevStats = stats;
+    this.prevStats = newStats;
   }
 }
