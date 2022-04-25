@@ -1,4 +1,4 @@
-import { EventsEmitter } from '../emitter';
+import { EventsEmitter, eventsEmitter } from '../emitter';
 import {
   CONNECTION_EVENT_LIST,
   EVENT_LIST,
@@ -18,6 +18,7 @@ import {
   IVideoOfferData,
 } from '../socketManager.types';
 import { logger } from '../utils/logging';
+import { BitrateMetric } from '../utils/metrics/bitrate';
 
 import {
   CallErrorMessage,
@@ -240,6 +241,9 @@ class RTCCoreConnection {
     if (!this.connection) return null;
 
     const connection = this.connection;
+    connection.metrics.forEach(
+      (metric) => metric.isSubscribed && metric.unsubscribe()
+    );
     this.connection = null;
     connection.isClosing = true;
 
@@ -261,6 +265,7 @@ class RTCCoreConnection {
     connection.connectionId = connectionId;
     connection.isClosing = false;
     connection.iceCandidatesQueue = [];
+    connection.metrics = [];
 
     connection.onnegotiationneeded = () => this._negotiationNeededHandler();
     connection.onicecandidate = (event) =>
@@ -434,7 +439,7 @@ class RTCCoreConnectionWithEvents extends RTCCoreConnection {
 
   constructor(params: RTCParams, connectionConfig?: RTCConfiguration) {
     super(params, connectionConfig);
-    this.emitter = new EventsEmitter();
+    this.emitter = eventsEmitter;
     this.socketMessenger = new SocketMessenger(params);
   }
 
@@ -534,6 +539,19 @@ class RTCBase extends RTCCoreConnectionWithEvents {
       'answer',
       params.answerTimeoutSecond || ANSWER_TIMEOUT_DEFAULT
     );
+
+    this.emitter.on(CONNECTION_EVENT_LIST.CONNECTION_NEW, ({ payload }) => {
+      payload.metrics.push(
+        ...[
+          new BitrateMetric({
+            params: this.params,
+            connection: payload,
+            deviceInfo: this.deviceInfo,
+            timeout: 4000,
+          }),
+        ]
+      );
+    });
   }
 
   protected async _enterProcess(): Promise<unknown> {

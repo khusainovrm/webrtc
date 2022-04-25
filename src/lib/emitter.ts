@@ -10,11 +10,12 @@ import {
   IEvent,
   IEventsEmitter,
 } from './emitter.types';
-import { EVENT_LIST } from './events';
+import eventsMap, { EVENT_LIST } from './events';
 import { logger } from './utils/logging';
 
 export class EventsEmitter implements IEventsEmitter {
   events: EventsDict;
+  eventsMap = eventsMap;
 
   constructor() {
     this.events = {
@@ -80,10 +81,9 @@ export class EventsEmitter implements IEventsEmitter {
     callbacks.forEach((cb) => cb(event));
 
     if (eventType !== EVENT_LIST.ALL) {
-      this.events[
-        EVENT_LIST.ALL
-      ].forEach((cb: EventCallbackMap[EVENT_LIST.ALL]) =>
-        cb(event as EventMap[EVENT_LIST.ALL])
+      this.events[EVENT_LIST.ALL].forEach(
+        (cb: EventCallbackMap[EVENT_LIST.ALL]) =>
+          cb(event as EventMap[EVENT_LIST.ALL])
       );
     }
   }
@@ -101,8 +101,10 @@ export class EventsEmitter implements IEventsEmitter {
   }
 }
 
+export const eventsEmitter = new EventsEmitter();
+
 export default {
   EMIT_TYPE_LIST,
-
   EventsEmitter,
+  eventsEmitter,
 };
