@@ -353,7 +353,6 @@ class RTCCoreConnection {
 
     switch (connection.iceConnectionState) {
       case 'closed':
-      case 'disconnected':
         this._closeConnection();
         break;
       case 'failed':
