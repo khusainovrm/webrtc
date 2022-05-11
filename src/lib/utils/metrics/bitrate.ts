@@ -34,6 +34,7 @@ export class BitrateMetric extends BaseMetric {
     type ProcessedBoundRtpAudio = ReturnType<typeof getData>;
     type ProcessedBoundRtpVideo = ProcessedBoundRtpAudio & {
       qualityLimitation?: ReturnType<typeof getQualityLimitationData>;
+      resolutions?: ReturnType<typeof getResolution>;
     };
 
     const isOut = type === 'out';
@@ -55,6 +56,20 @@ export class BitrateMetric extends BaseMetric {
         dataRaw?.qualityLimitationResolutionChanges,
     });
 
+    const getResolution = (dataRaw: any) => {
+      const resolutions = {
+        frameHeight: null,
+        frameWidth: null,
+        framesPerSecond: null,
+      };
+
+      resolutions.frameHeight = dataRaw?.frameHeight;
+      resolutions.frameWidth = dataRaw?.frameWidth;
+      resolutions.framesPerSecond = dataRaw?.framesPerSecond;
+
+      return resolutions;
+    };
+
     const boundRtpVideo = findByMedia(boundRtpList, 'video');
     const boundRtpAudio = findByMedia(boundRtpList, 'audio');
 
@@ -63,6 +78,7 @@ export class BitrateMetric extends BaseMetric {
 
     if (isOut) {
       video.qualityLimitation = getQualityLimitationData(boundRtpVideo);
+      video.resolutions = getResolution(boundRtpVideo);
     }
 
     return {
@@ -101,6 +117,7 @@ export class BitrateMetric extends BaseMetric {
       qualityLimitation: newStats.out.video.qualityLimitation,
       deviceInfo: this.deviceInfo,
       bitrate,
+      resolutions: newStats.out.video.resolutions,
     };
   }
 
