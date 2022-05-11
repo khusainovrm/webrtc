@@ -1,6 +1,6 @@
 {
   "name": "@frontend/budu-webrtc",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "author": "Rotachev Gleb",
   "description": "Library for implementing consultations based on WebRTC",
   "main": "build/main/index.js",
